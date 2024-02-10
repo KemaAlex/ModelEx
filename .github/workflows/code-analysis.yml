@@ -1,11 +1,11 @@
-name: Code Analysis with OpenAI
+name: C# Code Analysis with OpenAI
 
 on:
   push:
     branches:
-      - main
+      - main # Или любую другую ветку, где вы хотите выполнять анализ
     paths:
-      - '**/*.py' # Пример для Python файлов, измените маску пути в соответствии с вашими нуждами
+      - '**/*.cs' # Фокусируемся на изменениях в файлах C#
 
 jobs:
   analyze-code:
@@ -14,17 +14,18 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
       
-      - name: Analyze code with OpenAI
+      - name: Analyze C# code with OpenAI
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          for file in $(find . -name '*.py'); do # Пример для Python файлов
-            content=$(cat $file)
+          files=$(find . -type f -name '*.cs')
+          for file in $files; do
+            echo "Analyzing $file"
+            content=$(cat $file | sed ':a;N;$!ba;s/\n/\\n/g')
             response=$(curl -s -X POST "https://api.openai.com/v4/completions" \
               -H "Authorization: Bearer $OPENAI_API_KEY" \
               -H "Content-Type: application/json" \
-              -d "{\"model\": \"code-davinci-002\", \"prompt\": \"### Analyze this code\\n\\n\`\`\`python\\n$content\\n\`\`\`\\n\", \"temperature\": 0.5, \"max_tokens\": 150}")
-            echo "File: $file"
+              -d "{\"model\": \"code-davinci-002\", \"prompt\": \"### Analyze this C# code\\n\\n$content\\n\", \"temperature\": 0.5, \"max_tokens\": 150}")
             echo "Response: $response"
             echo "-----------------------------------"
           done
