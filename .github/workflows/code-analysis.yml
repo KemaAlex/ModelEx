@@ -3,46 +3,42 @@ name: C# Code Analysis with OpenAI
 on:
   push:
     branches:
-      - master # Запуск workflow на push в ветку master
+      - master
     paths:
-      - '**/*.cs' # Фокусируемся на изменениях в файлах C#
+      - '**/*.cs'
 
 jobs:
   analyze-code:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2 # Используйте последнюю версию actions/checkout
+        uses: actions/checkout@v2
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '16' # Установка Node.js версии 16
+          node-version: '16'
 
       - name: Analyze C# code with OpenAI
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }} # Используйте ваш OpenAI API ключ
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           files=$(find . -type f -name '*.cs' -not -path "./obj/*" -not -path "./bin/*")
           for file in $files; do
             echo "Analyzing $file"
-            if [ ! -s "$file" ]; then
-              echo "Skipping empty file $file"
+            content=$(cat "$file" | tr -d '\r' | base64)
+            if [ ${#content} -gt 100000 ]; then
+              echo "File $file is too large for direct analysis."
               continue
             fi
-            # Удаление BOM если он есть
-            sed '1s/^\xEF\xBB\xBF//' "$file" > temp_file && mv temp_file "$file"
-            # Проверка на непечатаемые символы и кодирование в base64
-            content=$(cat "$file" | tr -d '\r' | tr -d '\n' | base64) || { echo "Failed to base64 encode $file"; exit 1; }
-            prompt="Analyze this C# code:\n\n$content\n\n###"
-            
+            echo "{\"model\": \"code-davinci-002\", \"prompt\": \"Analyze this C# code:\\n\\n$content\\n\", \"temperature\": 0.5, \"max_tokens\": 150}" > temp_request.json
             response=$(curl -s -X POST "https://api.openai.com/v4/completions" \
               -H "Authorization: Bearer $OPENAI_API_KEY" \
               -H "Content-Type: application/json" \
-              -d "{\"model\": \"code-davinci-002\", \"prompt\": \"$prompt\", \"temperature\": 0.5, \"max_tokens\": 150}")
-              
+              -d @temp_request.json)
             echo "Response from OpenAI for $file:"
-            echo "$response" | jq '.choices[0].text' || { echo "Failed to parse JSON response"; }
+            echo "$response" | jq '.choices[0].text'
             echo "-----------------------------------"
+            rm temp_request.json
           done
         shell: bash
