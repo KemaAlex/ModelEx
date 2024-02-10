@@ -12,12 +12,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3 # Обновлено до последней версии
-      
-      # Здесь можете добавить шаги для установки или настройки Node.js, если это необходимо для вашего workflow
-      
+        uses: actions/checkout@v2 # Используйте последнюю версию actions/checkout
+
       - name: Analyze C# code with OpenAI
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }} # Используйте ваш OpenAI API ключ
         run: |
-          # Скрипт для анализа кода
+          files=$(find . -type f -name '*.cs' -not -path "./obj/*" -not -path "./bin/*")
+          for file in $files; do
+            echo "Analyzing $file"
+            if [ ! -s "$file" ]; then
+              echo "$file is empty or does not exist"
+              continue
+            fi
+            content=$(cat "$file" | tr -d '\r' | base64) # Удаляем символы возврата каретки и кодируем содержимое в base64
+            prompt="Analyze this C# code:\n\n$(echo $content | base64 --decode)\n\n###"
+            
+            response=$(curl -s -X POST "https://api.openai.com/v4/completions" \
+              -H "Authorization: Bearer $OPENAI_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d "{\"model\": \"code-davinci-002\", \"prompt\": \"$prompt\", \"temperature\": 0.5, \"max_tokens\": 150}")
+              
+            echo "Response from OpenAI for $file:"
+            echo "$response" | jq '.choices[0].text'
+            echo "-----------------------------------"
+          done
+        shell: bash
