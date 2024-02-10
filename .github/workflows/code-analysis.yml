@@ -1,11 +1,11 @@
-name: C# Code Analysis with OpenAI
+name: C# Code Analysis with OpenAI on Changed Files Only
 
 on:
   push:
     branches:
-      - master # Запуск workflow на push в ветку master
+      - main
     paths:
-      - '**/*.cs' # Фокусируемся на изменениях в файлах C#
+      - '**/*.cs'
 
 jobs:
   analyze-code:
@@ -13,30 +13,34 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-
-      - name: Analyze C# code with OpenAI
+      
+      - name: Install jq
+        run: sudo apt-get install jq
+      
+      - name: Get list of changed .cs files
+        id: get-changed-files
+        run: |
+          echo "Changed files in this commit:"
+          git diff --name-only ${{ github.sha }} ${{ github.event.before }} | grep '\.cs$' > changed_files.txt
+          if [ -s changed_files.txt ]; then
+            echo "::set-output name=files::$(<changed_files.txt)"
+          else
+            echo "::set-output name=files::"
+          fi
+      
+      - name: Analyze changed C# files with OpenAI
+        if: steps.get-changed-files.outputs.files != ''
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          find . -type f -name '*.cs' -not -path "./obj/*" -not -path "./bin/*" | while read file; do
+          while IFS= read -r file; do
             echo "Analyzing $file"
-            # Подготовка содержимого файла для запроса
-            content=$(base64 "$file") # Кодирование содержимого в base64
+            content=$(base64 "$file")
             prompt="Analyze this C# code:\n\n$(echo $content | base64 --decode)\n\n###"
-
-            # Создание временного файла для тела запроса
-            request_body=$(mktemp)
-            echo "{\"model\": \"code-davinci-002\", \"prompt\": \"$prompt\", \"temperature\": 0.7, \"max_tokens\": 2048}" > "$request_body"
-
-            # Отправка запроса в OpenAI
             response=$(curl -s -X POST "https://api.openai.com/v4/completions" \
               -H "Authorization: Bearer $OPENAI_API_KEY" \
               -H "Content-Type: application/json" \
-              -d @"$request_body")
+              -d "{\"model\": \"code-davinci-002\", \"prompt\": \"$prompt\", \"temperature\": 0.7, \"max_tokens\": 2048}")
             echo "Response: $response"
             echo "-----------------------------------"
-
-            # Удаление временного файла после использования
-            rm "$request_body"
-          done
-        shell: bash
+          done < changed_files.txt
