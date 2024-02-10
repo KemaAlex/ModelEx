@@ -3,9 +3,9 @@ name: C# Code Analysis with OpenAI
 on:
   push:
     branches:
-      - master # Или ваша целевая ветка
+      - master # Запуск workflow на push в ветку master
     paths:
-      - '**/*.cs' # Паттерн для поиска файлов C#
+      - '**/*.cs' # Фокусируемся на изменениях в файлах C#
 
 jobs:
   analyze-code:
@@ -13,31 +13,30 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-      
+
       - name: Analyze C# code with OpenAI
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           find . -type f -name '*.cs' -not -path "./obj/*" -not -path "./bin/*" | while read file; do
             echo "Analyzing $file"
-            
-            # Кодирование содержимого файла в формате Base64 для избежания проблем с переносами строк и специальными символами
-            content=$(base64 "$file")
-            
+            # Подготовка содержимого файла для запроса
+            content=$(base64 "$file") # Кодирование содержимого в base64
+            prompt="Analyze this C# code:\n\n$(echo $content | base64 --decode)\n\n###"
+
             # Создание временного файла для тела запроса
             request_body=$(mktemp)
-            echo "{\"model\": \"code-davinci-002\", \"prompt\": \"Analyze this C# code:\\n\\n$(echo $content | base64 --decode)\\n\", \"temperature\": 0.7, \"max_tokens\": 2048}" > "$request_body"
-            
-            # Выполнение запроса к OpenAI
+            echo "{\"model\": \"code-davinci-002\", \"prompt\": \"$prompt\", \"temperature\": 0.7, \"max_tokens\": 2048}" > "$request_body"
+
+            # Отправка запроса в OpenAI
             response=$(curl -s -X POST "https://api.openai.com/v4/completions" \
               -H "Authorization: Bearer $OPENAI_API_KEY" \
               -H "Content-Type: application/json" \
               -d @"$request_body")
-              
-            echo "Response for $file: $response"
-            
-            # Удаление временного файла запроса
-            rm "$request_body"
-            
+            echo "Response: $response"
             echo "-----------------------------------"
+
+            # Удаление временного файла после использования
+            rm "$request_body"
           done
+        shell: bash
