@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3 # Используем последнюю версию actions/checkout
+        uses: actions/checkout@v2 # Используйте последнюю версию actions/checkout
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
@@ -27,11 +27,14 @@ jobs:
           for file in $files; do
             echo "Analyzing $file"
             if [ ! -s "$file" ]; then
-              echo "$file is empty or does not exist"
+              echo "Skipping empty file $file"
               continue
             fi
-            content=$(tr -d '\r' < "$file" | base64 -w 0) || { echo "Failed to base64 encode $file"; exit 1; }
-            prompt="Analyze this C# code:\n\n$(echo $content | base64 --decode)\n\n###"
+            # Удаление BOM если он есть
+            sed '1s/^\xEF\xBB\xBF//' "$file" > temp_file && mv temp_file "$file"
+            # Проверка на непечатаемые символы и кодирование в base64
+            content=$(cat "$file" | tr -d '\r' | tr -d '\n' | base64) || { echo "Failed to base64 encode $file"; exit 1; }
+            prompt="Analyze this C# code:\n\n$content\n\n###"
             
             response=$(curl -s -X POST "https://api.openai.com/v4/completions" \
               -H "Authorization: Bearer $OPENAI_API_KEY" \
@@ -39,7 +42,7 @@ jobs:
               -d "{\"model\": \"code-davinci-002\", \"prompt\": \"$prompt\", \"temperature\": 0.5, \"max_tokens\": 150}")
               
             echo "Response from OpenAI for $file:"
-            echo "$response" | jq '.choices[0].text'
+            echo "$response" | jq '.choices[0].text' || { echo "Failed to parse JSON response"; }
             echo "-----------------------------------"
           done
         shell: bash
