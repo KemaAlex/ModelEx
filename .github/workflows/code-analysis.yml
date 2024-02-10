@@ -12,7 +12,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2 # Используйте последнюю версию actions/checkout
+        uses: actions/checkout@v3 # Используем последнюю версию actions/checkout
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16' # Установка Node.js версии 16
 
       - name: Analyze C# code with OpenAI
         env:
@@ -25,7 +30,7 @@ jobs:
               echo "$file is empty or does not exist"
               continue
             fi
-            content=$(cat "$file" | tr -d '\r' | base64) # Удаляем символы возврата каретки и кодируем содержимое в base64
+            content=$(tr -d '\r' < "$file" | base64 -w 0) || { echo "Failed to base64 encode $file"; exit 1; }
             prompt="Analyze this C# code:\n\n$(echo $content | base64 --decode)\n\n###"
             
             response=$(curl -s -X POST "https://api.openai.com/v4/completions" \
