@@ -5,7 +5,15 @@ namespace BenLincoln.TheLostWorlds.CDTextures
 {
 	public class Gex3PSXVRMTextureFile : PSXTextureFile
 	{
-		
+		public Gex3PSXVRMTextureFile(string path)
+			: base(path)
+		{
+			_FileType = TextureFileType.Gex3Playstation;
+			_FileTypeName = "Gex 3 (Playstation) VRM";
+			_TotalWidth = 512;
+			_TotalHeight = 512;
+			LoadTextureData();
+		}
 
 		protected void LoadTextureData()
 		{
