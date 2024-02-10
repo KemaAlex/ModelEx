@@ -3,9 +3,9 @@ name: C# Code Analysis with OpenAI
 on:
   push:
     branches:
-      - master
+      - master # Или ваша целевая ветка
     paths:
-      - '**/*.cs'
+      - '**/*.cs' # Паттерн для поиска файлов C#
 
 jobs:
   analyze-code:
@@ -13,34 +13,31 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-
+      
       - name: Analyze C# code with OpenAI
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          files=$(find . -type f -name '*.cs' -not -path "./obj/*" -not -path "./bin/*")
-          for file in $files; do
+          find . -type f -name '*.cs' -not -path "./obj/*" -not -path "./bin/*" | while read file; do
             echo "Analyzing $file"
             
-            # Подготовка содержимого файла для запроса
-            content=$(cat "$file" | base64 | tr -d '\n')
-            prompt="Analyze this C# code:\\n\\n$content\\n\\n###"
+            # Кодирование содержимого файла в формате Base64 для избежания проблем с переносами строк и специальными символами
+            content=$(base64 "$file")
             
-            # Сохранение JSON запроса во временный файл
-            echo "{\"model\": \"text-davinci-003\", \"prompt\": \"$prompt\", \"temperature\": 0.5, \"max_tokens\": 2048}" > temp_request.json
+            # Создание временного файла для тела запроса
+            request_body=$(mktemp)
+            echo "{\"model\": \"code-davinci-002\", \"prompt\": \"Analyze this C# code:\\n\\n$(echo $content | base64 --decode)\\n\", \"temperature\": 0.7, \"max_tokens\": 2048}" > "$request_body"
             
-            # Выполнение запроса к OpenAI API
+            # Выполнение запроса к OpenAI
             response=$(curl -s -X POST "https://api.openai.com/v4/completions" \
               -H "Authorization: Bearer $OPENAI_API_KEY" \
               -H "Content-Type: application/json" \
-              -d @temp_request.json)
+              -d @"$request_body")
               
-            # Вывод ответа от OpenAI
-            echo "Response from OpenAI for $file:"
-            echo "$response" | jq '.choices[0].text' || echo "Failed to get a valid response"
-            echo "-----------------------------------"
+            echo "Response for $file: $response"
             
-            # Удаление временного файла
-            rm temp_request.json
+            # Удаление временного файла запроса
+            rm "$request_body"
+            
+            echo "-----------------------------------"
           done
-        shell: bash
