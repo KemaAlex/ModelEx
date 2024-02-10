@@ -14,11 +14,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '16'
-
       - name: Analyze C# code with OpenAI
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -26,19 +21,26 @@ jobs:
           files=$(find . -type f -name '*.cs' -not -path "./obj/*" -not -path "./bin/*")
           for file in $files; do
             echo "Analyzing $file"
-            content=$(cat "$file" | tr -d '\r' | base64)
-            if [ ${#content} -gt 100000 ]; then
-              echo "File $file is too large for direct analysis."
-              continue
-            fi
-            echo "{\"model\": \"code-davinci-002\", \"prompt\": \"Analyze this C# code:\\n\\n$content\\n\", \"temperature\": 0.5, \"max_tokens\": 150}" > temp_request.json
+            
+            # Подготовка содержимого файла для запроса
+            content=$(cat "$file" | base64 | tr -d '\n')
+            prompt="Analyze this C# code:\\n\\n$content\\n\\n###"
+            
+            # Сохранение JSON запроса во временный файл
+            echo "{\"model\": \"text-davinci-003\", \"prompt\": \"$prompt\", \"temperature\": 0.5, \"max_tokens\": 2048}" > temp_request.json
+            
+            # Выполнение запроса к OpenAI API
             response=$(curl -s -X POST "https://api.openai.com/v4/completions" \
               -H "Authorization: Bearer $OPENAI_API_KEY" \
               -H "Content-Type: application/json" \
               -d @temp_request.json)
+              
+            # Вывод ответа от OpenAI
             echo "Response from OpenAI for $file:"
-            echo "$response" | jq '.choices[0].text'
+            echo "$response" | jq '.choices[0].text' || echo "Failed to get a valid response"
             echo "-----------------------------------"
+            
+            # Удаление временного файла
             rm temp_request.json
           done
         shell: bash
