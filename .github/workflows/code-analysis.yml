@@ -1,46 +1,45 @@
-name: C# Code Analysis with OpenAI on Changed Files Only
+name: C# Code Analysis with OpenAI for Changed Files
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
     paths:
       - '**/*.cs'
 
 jobs:
-  analyze-code:
+  analyze-changed-files:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v2
       
       - name: Install jq
         run: sudo apt-get install jq
-      
-      - name: Get list of changed .cs files
-        id: get-changed-files
+
+      - name: Fetch changed files
+        id: files
         run: |
-          echo "Changed files in this commit:"
-          git diff --name-only ${{ github.sha }} ${{ github.event.before }} | grep '\.cs$' > changed_files.txt
-          if [ -s changed_files.txt ]; then
-            echo "::set-output name=files::$(<changed_files.txt)"
-          else
-            echo "::set-output name=files::"
-          fi
+          echo "::set-output name=list::$(git diff --name-only ${{ github.sha }} ${{ github.event.before }} | grep '\.cs$' | xargs)"
+        shell: bash
       
-      - name: Analyze changed C# files with OpenAI
-        if: steps.get-changed-files.outputs.files != ''
+      - name: Analyze with OpenAI
+        if: steps.files.outputs.list
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          while IFS= read -r file; do
+          for file in ${{ steps.files.outputs.list }}
+          do
             echo "Analyzing $file"
-            content=$(base64 "$file")
-            prompt="Analyze this C# code:\n\n$(echo $content | base64 --decode)\n\n###"
+            # Read file content, limit the number of characters to avoid exceeding API limits
+            content=$(head -c 1000 "$file")
+            # Use base64 encoding to avoid JSON escaping issues
+            encoded_content=$(echo "$content" | base64)
+            prompt="Analyze this C# code:\n\n$(echo $encoded_content | base64 --decode)\n\n###"
             response=$(curl -s -X POST "https://api.openai.com/v4/completions" \
               -H "Authorization: Bearer $OPENAI_API_KEY" \
               -H "Content-Type: application/json" \
               -d "{\"model\": \"code-davinci-002\", \"prompt\": \"$prompt\", \"temperature\": 0.7, \"max_tokens\": 2048}")
-            echo "Response: $response"
+            echo "$response" | jq '.choices[0].text'
             echo "-----------------------------------"
-          done < changed_files.txt
+          done
+        shell: bash
