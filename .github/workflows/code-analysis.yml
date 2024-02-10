@@ -13,7 +13,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-      
+
+      # Убедитесь, что jq установлен, если он нужен для обработки ответа
+      - name: Install jq
+        run: sudo apt-get install jq
+
       - name: Analyze C# code with OpenAI
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -27,10 +31,10 @@ jobs:
             response=$(curl -s -X POST "https://api.openai.com/v4/completions" \
               -H "Authorization: Bearer $OPENAI_API_KEY" \
               -H "Content-Type: application/json" \
-              -d "{\"model\": \"code-davinci-002\", \"prompt\": \"$prompt\", \"temperature\": 0.5, \"max_tokens\": 150}")
+              -d "{\"model\": \"text-davinci-003\", \"prompt\": \"$prompt\", \"temperature\": 0.7, \"max_tokens\": 250, \"top_p\": 1, \"frequency_penalty\": 0, \"presence_penalty\": 0}")
               
             echo "Response from OpenAI for $file:"
-            echo $response | jq '.choices[0].text'
+            echo "$response" | jq '.choices[0].text'
             echo "-----------------------------------"
           done
         shell: bash
